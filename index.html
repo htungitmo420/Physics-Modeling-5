@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Квантовая механика в одном измерении</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="js/physics.js"></script>
+  <script defer src="js/charts.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Квантовая механика в одном измерении</h1>
+      <p>Связанные состояния и прохождение частицы через потенциальный барьер.</p>
+    </header>
+    <nav class="toolbar" aria-label="Режим моделирования">
+      <button type="button" data-mode="well" aria-pressed="true">Потенциальная яма</button>
+      <button type="button" data-mode="barrier" aria-pressed="false">Потенциальный барьер</button>
+    </nav>
+    <div class="layout">
+      <section class="visuals" aria-label="Результаты моделирования">
+        <figure class="card figure">
+          <figcaption>
+            <h2>Потенциал U(x)</h2>
+            <span class="legend" id="potential-legend"></span>
+          </figcaption>
+          <canvas id="potential" role="img" aria-label="График потенциала и выбранной энергии"></canvas>
+        </figure>
+        <figure class="card figure">
+          <figcaption>
+            <h2 id="response-title">Собственная функция ψ(x)</h2>
+            <label class="scale" id="scale-field" hidden><input type="checkbox" id="log-scale"> Логарифмическая шкала</label>
+          </figcaption>
+          <canvas class="tall" id="response" role="img" aria-label="График собственной функции"></canvas>
+        </figure>
+        <section class="card results" id="well-results">
+          <h2>Связанные состояния</h2>
+          <p class="hint" id="well-summary">Выполняется расчёт.</p>
+        </section>
+        <section class="card results" id="barrier-results" hidden>
+          <h2>Коэффициенты при выбранной энергии</h2>
+          <dl class="measurements">
+            <div><dt>Прохождение T</dt><dd id="transmission">—</dd></div>
+            <div><dt>Отражение R</dt><dd id="reflection">—</dd></div>
+            <div><dt>Погрешность |R + T − 1|</dt><dd id="flux-error">—</dd></div>
+          </dl>
+        </section>
+      </section>
+      <aside class="card controls">
+        <h2>Параметры</h2>
+        <form id="controls">
+          <label class="field" for="shape">
+            Форма потенциала
+            <select id="shape">
+              <option value="rectangle">Прямоугольный</option>
+              <option value="triangle">Треугольный</option>
+              <option value="parabola">Параболический</option>
+              <option value="double">Два максимума по модулю</option>
+              <option value="formula">Своя формула U(x)</option>
+              <option value="table">Таблица x, U</option>
+            </select>
+          </label>
+          <div class="field">
+            <div class="field-top"><label id="width-label" for="width">Ширина ямы a</label><output for="width" id="width-value"></output></div>
+            <input type="range" id="width" min="0.25" max="5" step="0.01" value="2">
+          </div>
+          <div class="field" id="height-field">
+            <div class="field-top"><label id="height-label" for="height">Глубина ямы</label><output for="height" id="height-value"></output></div>
+            <input type="range" id="height" min="0.01" max="5" step="0.01" value="1">
+          </div>
+          <div class="field">
+            <div class="field-top"><label for="mass">Масса частицы m/mₑ</label><output for="mass" id="mass-value"></output></div>
+            <input type="range" id="mass" min="0.1" max="4" step="0.01" value="1">
+          </div>
+          <label class="field field-label" id="exact-mass-field" for="exact-mass" hidden>
+            Точная масса m/mₑ
+            <input type="number" id="exact-mass" min="0.001" max="2000" step="any" required>
+          </label>
+          <div class="field" id="energy-field" hidden>
+            <div class="field-top"><label for="energy">Энергия частицы E</label><output for="energy" id="energy-value"></output></div>
+            <input type="range" id="energy" min="0.001" max="3" step="0.001" value="0.2">
+            <label for="exact-energy">Точная энергия E, эВ</label>
+            <input type="number" id="exact-energy" min="0.000001" max="200" step="any" required>
+          </div>
+          <div class="field" id="expression-field" hidden>
+            <label for="formula">Формула U(x), эВ</label>
+            <input class="code" id="formula" type="text" maxlength="500" spellcheck="false" aria-describedby="formula-hint">
+            <p class="hint" id="formula-hint">x и L в нм, L — ширина. Поддерживаются + − * / ^, pi, sin, cos, tan, exp, log, sqrt, abs.</p>
+          </div>
+          <div class="field" id="table-field" hidden>
+            <label for="profile-table">Точки x (нм), U (эВ)</label>
+            <textarea class="code" id="profile-table" spellcheck="false" aria-describedby="table-hint" maxlength="40000"></textarea>
+            <p class="hint" id="table-hint">По одной паре на строку, от x = 0 до x = L. Разделяйте числа пробелом, запятой или точкой с запятой. Десятичный знак — точка.</p>
+          </div>
+          <label class="field" id="state-field" for="state">
+            Состояние
+            <select id="state" disabled><option>—</option></select>
+          </label>
+          <div class="actions">
+            <button class="primary" id="apply" type="submit" hidden>Применить профиль</button>
+            <button id="reset" type="button">Сбросить</button>
+          </div>
+        </form>
+        <p class="status" id="status" role="status">Выполняется расчёт…</p>
+      </aside>
+    </div>
+    <footer><a href="REPORT.md">Метод расчёта и проверка</a></footer>
+  </main>
+</body>
+</html>
