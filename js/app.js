@@ -105,7 +105,10 @@
       byId("well-summary").textContent = states.length
         ? "Найдено уровней: " + states.length + ". Выберите уровень в списке «Состояние»."
         : "Связанных состояний с E < 0 не найдено.";
-      status("Готово · потенциал вне ямы равен нулю.");
+      const grid = "Готово · отрезков сетки: " + response.intervals + ".";
+      status(response.gridLimited
+        ? grid + " Достигнут предел сетки. Для самых узких участков точность ограничена."
+        : grid + " Вне ямы U = 0.");
     } else {
       renderValues();
       status("Готово · потенциал вне барьера равен нулю.");

@@ -145,7 +145,45 @@
           const x = width * (i / 320);
           return [x, sample(x)];
         });
-    return { sample, plot, knots: points?.map(([x]) => x) };
+    return { sample, plot, points };
+  }
+
+  function tableGridSize(points, width) {
+    let shortest = Infinity;
+    for (let i = 1; i < points.length; i++) {
+      const [x0, u0] = points[i - 1];
+      const [x1, u1] = points[i];
+      if (u0 !== u1) shortest = Math.min(shortest, x1 - x0);
+    }
+    const required = Math.ceil(4 * width / shortest);
+    let intervals = 512;
+    while (intervals < required && intervals < 8192) intervals *= 2;
+    return { intervals, required };
+  }
+
+  function averageTablePotential(points, intervals, width) {
+    // Integrate the linear profile over each node's cell, including partial
+    // cells at the ends. A feature between nodes still contributes to H.
+    const dx = width / intervals;
+    const potential = new Float64Array(intervals + 1);
+    let segment = 1;
+    let x = 0;
+    for (let i = 0; i <= intervals; i++) {
+      const right = i === intervals ? width : (i + 0.5) * dx;
+      let integral = 0;
+      while (x < right) {
+        const [x0, u0] = points[segment - 1];
+        const [x1, u1] = points[segment];
+        const end = Math.min(right, x1);
+        const mid = x + (end - x) / 2;
+        const average = u0 + (u1 - u0) * ((mid - x0) / (x1 - x0));
+        integral += (end - x) * average;
+        x = end;
+        if (x === x1 && segment < points.length - 1) segment++;
+      }
+      potential[i] = integral / dx;
+    }
+    return potential;
   }
 
   function tridiagonalSolve(diagonal, off, input) {
@@ -169,16 +207,21 @@
     return rhs;
   }
 
-  function solveWell(config, intervals = 512) {
+  function solveWell(config, requestedIntervals) {
     const { width, mass } = config;
     const profile = makeProfile(config);
+    const grid = profile.points ? tableGridSize(profile.points, width) : { intervals: 512, required: 0 };
+    const intervals = requestedIntervals ?? grid.intervals;
     const dx = width / intervals;
     const kinetic = ELECTRON_KINETIC / (mass * dx ** 2);
-    const potential = Float64Array.from({ length: intervals + 1 }, (_, i) => {
-      const weight = i === 0 || i === intervals ? 0.5 : 1;
-      return weight * profile.sample(width * (i / intervals));
-    });
+    const potential = profile.points
+      ? averageTablePotential(profile.points, intervals, width)
+      : Float64Array.from({ length: intervals + 1 }, (_, i) => {
+          const weight = i === 0 || i === intervals ? 0.5 : 1;
+          return weight * profile.sample(width * (i / intervals));
+        });
     const diagonal = potential.map(value => 2 * kinetic + value);
+    const kineticSquared = kinetic ** 2;
 
     // Eliminate the two semi-infinite, zero-potential lattice tails exactly.
     function decay(energy) {
@@ -190,7 +233,7 @@
       let total = 0;
       for (let i = 0; i <= intervals; i++) {
         const tail = i === 0 || i === intervals ? edge : 0;
-        pivot = diagonal[i] - energy - tail - (i ? kinetic ** 2 / pivot : 0);
+        pivot = diagonal[i] - energy - tail - (i ? kineticSquared / pivot : 0);
         if (Math.abs(pivot) < kinetic * Number.EPSILON) pivot = -kinetic * Number.EPSILON;
         if (pivot < 0) total++;
       }
@@ -200,6 +243,7 @@
     const upper = -Math.max(1e-11, 2 * kinetic * Number.EPSILON);
     const total = lower < upper ? count(upper) : 0;
     const states = [];
+    const plotStep = Math.max(1, Math.ceil(intervals / 512));
     for (let state = 0; state < total; state++) {
       let left = lower;
       let right = upper;
@@ -231,20 +275,21 @@
         const x = -tail * i / 80;
         curve.push([x, wave[0] * Math.exp(x * exponent / dx)]);
       }
-      for (let i = 0; i <= intervals; i++) curve.push([i * dx, wave[i]]);
+      for (let i = 0; i < intervals; i += plotStep) curve.push([i * dx, wave[i]]);
+      curve.push([width, wave[intervals]]);
       for (let i = 1; i <= 80; i++) {
         const x = tail * i / 80;
         curve.push([width + x, wave[intervals] * Math.exp(-x * exponent / dx)]);
       }
       states.push({ energy, curve });
     }
-    return { mode: "well", width, profile: profile.plot, states };
+    return { mode: "well", width, profile: profile.plot, states, intervals, gridLimited: grid.required > intervals };
   }
 
   function prepareBarrier(config, intervals = 280) {
     const { width, shape } = config;
     const profile = makeProfile(config);
-    const knots = profile.knots || [0, width];
+    const knots = profile.points?.map(([x]) => x) || [0, width];
     const segments = [];
     for (let i = 1; i < knots.length; i++) {
       const length = knots[i] - knots[i - 1];
